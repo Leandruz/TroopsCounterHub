@@ -2,7 +2,7 @@
  * Tribal Wars Troops Counter & BB Code Exporter
  * Author: Leandro Correa (Leandruz)
  * Repository: https://github.com/Leandruz/TroopsCounterHub
- * Version: 2.0.1
+ * Version: 2.1.0
  * 
  * Instructions:
  * Create a bookmarklet in your browser with the following URL:
@@ -12,30 +12,35 @@
 (function () {
     'use strict';
 
-    // 1. Environment & Screen Check
-    function checkScreen() {
-        let screen = null;
-        let mode = null;
+    // 1. Environment Check & Auto-Redirect
+    function isUnitsOverview() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const screenParam = urlParams.get('screen');
+        const modeParam = urlParams.get('mode');
+        const gdScreen = (typeof game_data !== 'undefined' && game_data.screen) ? game_data.screen : null;
+        const gdMode = (typeof game_data !== 'undefined' && game_data.mode) ? game_data.mode : null;
 
-        if (typeof game_data !== 'undefined' && game_data.screen) {
-            screen = game_data.screen;
-            mode = game_data.mode;
-        } else {
-            const urlParams = new URLSearchParams(window.location.search);
-            screen = urlParams.get('screen');
-            mode = urlParams.get('mode');
-        }
+        const isOverview = (screenParam === 'overview_villages' || gdScreen === 'overview_villages');
+        const isUnitsTable = ($('#units_table').length > 0 || $('table.vis').has('img[src*="unit_"]').length > 0);
 
-        return (screen === 'overview_villages' && mode === 'units');
+        return isOverview && (modeParam === 'units' || gdMode === 'units' || isUnitsTable);
     }
 
-    if (!checkScreen()) {
-        const msg = 'Este script deve ser executado na página de <b>Visualização Geral de Tropas</b>.<br><a href="/game.php?screen=overview_villages&mode=units" class="btn">Ir para Tropas</a>';
-        if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
-            UI.ErrorMessage(msg, 6000);
-        } else {
-            alert('Este script deve ser executado na página de Visualização Geral de Tropas (overview_villages & mode=units).');
+    if (!isUnitsOverview()) {
+        const msg = 'Redirecionando para a Visualização Geral de Tropas...';
+        if (typeof UI !== 'undefined' && typeof UI.InfoMessage === 'function') {
+            UI.InfoMessage(msg, 3000);
+        } else if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
+            UI.ErrorMessage(msg, 3000);
         }
+        
+        const targetUrl = (typeof game_data !== 'undefined' && game_data.link_base_pure)
+            ? game_data.link_base_pure.replace(/screen=\w+/, 'screen=overview_villages&mode=units')
+            : '/game.php?screen=overview_villages&mode=units';
+
+        setTimeout(function() {
+            window.location.href = targetUrl;
+        }, 300);
         return;
     }
 
@@ -97,23 +102,19 @@
         militia: 'Militia'
     };
 
-    // Get current language from game_data
     const market = (typeof game_data !== 'undefined' && game_data.market) ? game_data.market : 'en';
     const isPT = ['br', 'pt'].includes(market.toLowerCase()) || (typeof game_data !== 'undefined' && game_data.locale === 'pt_BR');
     const unitNames = isPT ? UNIT_NAMES_PT : UNIT_NAMES_EN;
 
-    // Unit classification definitions
     const DEFENSE_UNITS = ['spear', 'sword', 'archer', 'heavy', 'catapult', 'militia'];
     const OFFENSE_UNITS = ['axe', 'light', 'marcher', 'ram', 'catapult'];
 
-    // Default configuration thresholds (can be updated in Settings tab)
     let config = {
         fullThreshold: 19000,
         threeQuartersThreshold: 14000,
         halfThreshold: 9000,
         quarterThreshold: 4000,
         catapultNukeMin: 100,
-        // Which blocks should be exported
         exportBlocks: {
             nukesNobles: true,
             defenseNobles: true,
@@ -133,11 +134,10 @@
             scout14: true,
             other: true
         },
-        bbCodeFormat: 'icons', // 'icons' | 'text' | 'coords'
+        bbCodeFormat: 'icons',
         hideZeroUnits: true
     };
 
-    // Load saved settings if any
     try {
         const savedConfig = localStorage.getItem('tw_troops_counter_bb_config');
         if (savedConfig) {
@@ -172,9 +172,8 @@
     }
     fetchUnitPopulations();
 
-    // 5. Parse Troops Table (Robust & Multi-format)
+    // 5. Parse Troops Table (Multi-format & Multi-view)
     function parseTroops() {
-        // 1. Locate main units table
         let $table = $('#units_table');
         if ($table.length === 0) {
             $table = $('table.vis').has('img[src*="unit_"]').first();
@@ -184,7 +183,7 @@
         }
 
         if ($table.length === 0) {
-            const msg = 'Tabela de tropas (#units_table) não foi encontrada nesta página. Certifique-se de estar na aba Tropas.';
+            const msg = 'Tabela de tropas (#units_table) não foi encontrada nesta página.';
             if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
                 UI.ErrorMessage(msg, 6000);
             } else {
@@ -193,7 +192,6 @@
             return null;
         }
 
-        // 2. Identify unit columns from header images
         const unitsOrder = [];
         let ths = $table.find('thead th');
         if (ths.length === 0) {
@@ -234,8 +232,6 @@
         }
 
         const villages = [];
-
-        // 3. Parse Village Rows
         let tbodies = $table.find('tbody');
         if (tbodies.length === 0) {
             tbodies = $table;
@@ -380,73 +376,11 @@
     }
 
     // 6. Classification Engine
-    function classifyVillage(village) {
-        let offensePop = 0;
-        let defensePop = 0;
-        let scoutPop = 0;
-        const snobCount = village.own['snob'] || 0;
-        const catapultCount = village.own['catapult'] || 0;
-
-        // Calculate populations
-        Object.keys(village.own).forEach(unit => {
-            const count = village.own[unit];
-            const pop = unitPopulations[unit] || 1;
-            
-            if (OFFENSE_UNITS.includes(unit)) {
-                offensePop += count * pop;
-            }
-            if (DEFENSE_UNITS.includes(unit)) {
-                defensePop += count * pop;
-            }
-            if (unit === 'spy') {
-                scoutPop += count * pop;
-            }
-        });
-
-        // Determine dominant type
-        let type = 'other';
-        let dominantPop = Math.max(offensePop, defensePop, scoutPop);
-
-        // Check overrides first
-        if (snobCount >= 4 && offensePop >= config.fullThreshold) {
-            return 'nukesNobles';
-        }
-        if (snobCount >= 4 && defensePop >= config.fullThreshold) {
-            return 'defenseNobles';
-        }
-        if (snobCount >= 1) {
-            return 'noblesOnly';
-        }
-        if (catapultCount >= config.catapultNukeMin && offensePop >= config.fullThreshold) {
-            return 'catNukes';
-        }
-
-        // Dominant classification
-        if (scoutPop === dominantPop && scoutPop >= config.quarterThreshold) {
-            if (scoutPop >= config.fullThreshold) return 'scoutFull';
-            if (scoutPop >= config.threeQuartersThreshold) return 'scout34';
-            if (scoutPop >= config.halfThreshold) return 'scout12';
-            return 'scout14';
-        } else if (offensePop >= defensePop && offensePop >= config.quarterThreshold) {
-            if (offensePop >= config.fullThreshold) return 'offenseFull';
-            if (offensePop >= config.threeQuartersThreshold) return 'offense34';
-            if (offensePop >= config.halfThreshold) return 'offense12';
-            return 'offense14';
-        } else if (defensePop >= offensePop && defensePop >= config.quarterThreshold) {
-            if (defensePop >= config.fullThreshold) return 'defenseFull';
-            if (defensePop >= config.threeQuartersThreshold) return 'defense34';
-            if (defensePop >= config.halfThreshold) return 'defense12';
-            return 'defense14';
-        }
-
-        return 'other';
-    }
-
     const GROUP_DETAILS = {
-        nukesNobles: { label: 'Ataque - Full com Nobres (Full Train)', isOff: true, color: '#ff7f50' },
-        defenseNobles: { label: 'Defesa - Full com Nobres (Full Train)', isOff: false, color: '#70a1ff' },
-        noblesOnly: { label: 'Aldeias de Nobres', isOff: true, color: '#eccc68' },
-        catNukes: { label: 'Catapult Nukes (Ataques Cat)', isOff: true, color: '#ff6b81' },
+        nukesNobles: { label: 'Ataques Full c/ Nobres', isOff: true, color: '#e74c3c' },
+        defenseNobles: { label: 'Defesas Full c/ Nobres', isOff: false, color: '#3498db' },
+        noblesOnly: { label: 'Aldeias c/ Nobres', isOff: false, color: '#9b59b6' },
+        catNukes: { label: 'Ataques c/ Catapultas (Cat Nuke)', isOff: true, color: '#e67e22' },
         offenseFull: { label: 'Ataques Full (1/1)', isOff: true, color: '#ff4757' },
         offense34: { label: 'Ataques Semi (3/4)', isOff: true, color: '#ff6348' },
         offense12: { label: 'Ataques Meio (1/2)', isOff: true, color: '#ffa502' },
@@ -462,22 +396,58 @@
         other: { label: 'Outros / Em Desenvolvimento', isOff: false, color: '#747d8c' }
     };
 
-    // 7. BB Code Generator
-    function buildBBCode(villages, unitsOrder) {
-        // Group villages
-        const groups = {};
-        Object.keys(GROUP_DETAILS).forEach(k => {
-            groups[k] = [];
+    function classifyVillage(village) {
+        let offensePop = 0;
+        let defensePop = 0;
+        let scoutPop = 0;
+        const snobCount = village.own['snob'] || 0;
+        const catapultCount = village.own['catapult'] || 0;
+
+        Object.keys(village.own).forEach(unit => {
+            const count = village.own[unit];
+            const pop = unitPopulations[unit] || 1;
+            
+            if (OFFENSE_UNITS.includes(unit)) offensePop += count * pop;
+            if (DEFENSE_UNITS.includes(unit)) defensePop += count * pop;
+            if (unit === 'spy') scoutPop += count * pop;
         });
 
-        villages.forEach(v => {
-            const cat = classifyVillage(v);
-            groups[cat].push(v);
-        });
+        if (snobCount >= 4 && offensePop >= config.fullThreshold) return 'nukesNobles';
+        if (snobCount >= 4 && defensePop >= config.fullThreshold) return 'defenseNobles';
+        if (snobCount >= 1) return 'noblesOnly';
+        if (catapultCount >= config.catapultNukeMin && offensePop >= config.fullThreshold) return 'catNukes';
+
+        let dominantPop = Math.max(offensePop, defensePop, scoutPop);
+        if (scoutPop === dominantPop && scoutPop >= config.quarterThreshold) {
+            if (scoutPop >= config.fullThreshold) return 'scoutFull';
+            if (scoutPop >= config.threeQuartersThreshold) return 'scout34';
+            if (scoutPop >= config.halfThreshold) return 'scout12';
+            return 'scout14';
+        }
+        if (offensePop === dominantPop && offensePop >= config.quarterThreshold) {
+            if (offensePop >= config.fullThreshold) return 'offenseFull';
+            if (offensePop >= config.threeQuartersThreshold) return 'offense34';
+            if (offensePop >= config.halfThreshold) return 'offense12';
+            return 'offense14';
+        }
+        if (defensePop >= config.quarterThreshold) {
+            if (defensePop >= config.fullThreshold) return 'defenseFull';
+            if (defensePop >= config.threeQuartersThreshold) return 'defense34';
+            if (defensePop >= config.halfThreshold) return 'defense12';
+            return 'defense14';
+        }
+
+        return 'other';
+    }
+
+    // 7. BB Code Generators
+    function buildGlobalBBCode(villages, unitsOrder) {
+        const groups = {};
+        Object.keys(GROUP_DETAILS).forEach(k => groups[k] = []);
+        villages.forEach(v => groups[classifyVillage(v)].push(v));
 
         let bbCode = '';
         Object.keys(GROUP_DETAILS).forEach(key => {
-            // Check if this block should be exported and has villages
             if (!config.exportBlocks[key] || groups[key].length === 0) return;
 
             const group = GROUP_DETAILS[key];
@@ -485,25 +455,10 @@
             bbCode += `[spoiler=Ver lista]\n`;
 
             if (config.bbCodeFormat === 'coords') {
-                const coordsList = groups[key].map(v => v.coords).join(' ');
-                bbCode += `${coordsList}\n`;
+                bbCode += groups[key].map(v => v.coords).join(' ') + `\n`;
             } else {
                 groups[key].forEach(v => {
-                    bbCode += `[coord]${v.coords}[/coord] - `;
-                    
-                    const unitStrings = [];
-                    unitsOrder.forEach(unit => {
-                        const count = v.own[unit] || 0;
-                        if (config.hideZeroUnits && count === 0) return;
-                        
-                        if (config.bbCodeFormat === 'icons') {
-                            unitStrings.push(`[unit]${unit}[/unit] ${count}`);
-                        } else {
-                            unitStrings.push(`${unitNames[unit]}: ${count}`);
-                        }
-                    });
-                    
-                    bbCode += unitStrings.join(' | ') + `\n`;
+                    bbCode += buildVillageBBLine(v, unitsOrder, config.bbCodeFormat) + `\n`;
                 });
             }
 
@@ -513,32 +468,36 @@
         return bbCode.trim();
     }
 
+    function buildVillageBBLine(v, unitsOrder, format) {
+        let line = `[coord]${v.coords}[/coord] - `;
+        const parts = [];
+        unitsOrder.forEach(unit => {
+            const count = v.own[unit] || 0;
+            if (config.hideZeroUnits && count === 0) return;
+            
+            if (format === 'icons') {
+                parts.push(`[unit]${unit}[/unit] ${count.toLocaleString()}`);
+            } else {
+                parts.push(`${unitNames[unit] || unit}: ${count.toLocaleString()}`);
+            }
+        });
+        return line + (parts.length ? parts.join(' | ') : 'Sem tropas');
+    }
+
     // 8. Main Application Controller
     function startApp() {
         const parsed = parseTroops();
-        if (!parsed || !parsed.villages || parsed.villages.length === 0) {
-            const errorMsg = 'Nenhuma informação de tropas encontrada na tabela (#units_table). Certifique-se de estar na página <b>Visualização Geral -> Tropas</b>.';
-            if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
-                UI.ErrorMessage(errorMsg, 6000);
-            } else {
-                alert('Nenhuma informação de tropas encontrada na tabela (#units_table). Certifique-se de estar na página Visualização Geral -> Tropas.');
-            }
-            return;
-        }
+        if (!parsed || !parsed.villages || parsed.villages.length === 0) return;
 
         const { villages, unitsOrder } = parsed;
 
-        // Render UI Container
         let container = document.getElementById('tw-counter-modal');
-        if (container) {
-            container.remove();
-        }
+        if (container) container.remove();
 
         container = document.createElement('div');
         container.id = 'tw-counter-modal';
         document.body.appendChild(container);
 
-        // Inject Stylesheet
         let style = document.getElementById('tw-counter-styles');
         if (style) style.remove();
         
@@ -550,32 +509,32 @@
                 top: 50%;
                 left: 50%;
                 transform: translate(-50%, -50%);
-                width: 700px;
-                max-height: 85vh;
-                background: rgba(20, 21, 23, 0.97);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+                width: 820px;
+                max-height: 88vh;
+                background: rgba(18, 20, 24, 0.98);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
                 border-radius: 12px;
-                z-index: 99999;
+                z-index: 999999;
                 color: #f1f2f6;
                 font-family: 'Outfit', sans-serif;
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
                 box-sizing: border-box;
-                animation: twFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                animation: twFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
             }
             @keyframes twFadeIn {
-                from { opacity: 0; transform: translate(-50%, -47%) scale(0.96); }
+                from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); }
                 to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
             }
             .tw-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 18px 24px;
-                background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%);
-                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+                padding: 16px 22px;
+                background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             }
             .tw-header-title h2 {
                 margin: 0;
@@ -583,10 +542,9 @@
                 font-weight: 600;
                 color: #ff9f43;
                 letter-spacing: 0.5px;
-                text-shadow: 0 2px 4px rgba(0,0,0,0.5);
             }
             .tw-header-title p {
-                margin: 4px 0 0 0;
+                margin: 3px 0 0 0;
                 font-size: 11px;
                 color: #a4b0be;
             }
@@ -605,38 +563,38 @@
             }
             .tw-nav {
                 display: flex;
-                background: rgba(0, 0, 0, 0.25);
+                background: rgba(0, 0, 0, 0.3);
                 padding: 6px 12px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             }
             .tw-nav-tab {
                 background: transparent;
                 border: none;
                 color: #a4b0be;
-                padding: 10px 18px;
+                padding: 10px 16px;
                 font-size: 13px;
                 font-weight: 500;
                 cursor: pointer;
                 transition: all 0.2s ease;
                 border-radius: 6px;
-                margin-right: 6px;
+                margin-right: 4px;
             }
             .tw-nav-tab:hover {
                 color: #f1f2f6;
-                background: rgba(255,255,255,0.03);
+                background: rgba(255,255,255,0.04);
             }
             .tw-nav-tab.active {
                 color: #ff9f43;
-                background: rgba(255, 159, 67, 0.1);
-                box-shadow: inset 0 0 0 1px rgba(255, 159, 67, 0.15);
+                background: rgba(255, 159, 67, 0.12);
+                box-shadow: inset 0 0 0 1px rgba(255, 159, 67, 0.2);
             }
             .tw-content {
                 flex: 1;
-                padding: 24px;
+                padding: 20px 24px;
                 overflow-y: auto;
                 box-sizing: border-box;
-                min-height: 350px;
-                max-height: 60vh;
+                min-height: 380px;
+                max-height: 65vh;
             }
             .tw-tab-panel {
                 display: none;
@@ -646,22 +604,22 @@
                 animation: twTabSlide 0.2s ease-out;
             }
             @keyframes twTabSlide {
-                from { opacity: 0; transform: translateY(6px); }
+                from { opacity: 0; transform: translateY(4px); }
                 to { opacity: 1; transform: translateY(0); }
             }
             
-            /* Dashboard Styles */
+            /* Stats Cards */
             .tw-stats-row {
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
                 gap: 16px;
-                margin-bottom: 24px;
+                margin-bottom: 22px;
             }
             .tw-stat-card {
                 background: rgba(255,255,255,0.02);
-                border: 1px solid rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 8px;
-                padding: 14px 18px;
+                padding: 12px 16px;
                 text-align: center;
             }
             .tw-stat-card h4 {
@@ -672,8 +630,8 @@
                 letter-spacing: 0.5px;
             }
             .tw-stat-card p {
-                margin: 8px 0 0 0;
-                font-size: 24px;
+                margin: 6px 0 0 0;
+                font-size: 22px;
                 font-weight: 700;
                 color: #ff9f43;
             }
@@ -681,116 +639,197 @@
             .tw-section-title {
                 font-size: 14px;
                 font-weight: 600;
-                margin: 0 0 14px 0;
-                color: #ff9f43;
-                border-bottom: 1px solid rgba(255,255,255,0.05);
+                color: #dfe4ea;
+                margin: 18px 0 12px 0;
                 padding-bottom: 6px;
+                border-bottom: 1px solid rgba(255,255,255,0.05);
             }
-            
+
             .tw-group-grid {
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
-                gap: 12px;
-                margin-bottom: 24px;
+                gap: 10px;
+                margin-bottom: 20px;
             }
             .tw-group-item {
                 display: flex;
                 align-items: center;
-                background: rgba(0,0,0,0.15);
-                border: 1px solid rgba(255,255,255,0.02);
+                background: rgba(0,0,0,0.2);
+                border: 1px solid rgba(255,255,255,0.04);
                 border-radius: 6px;
                 padding: 10px 14px;
             }
             .tw-group-indicator {
-                width: 12px;
-                height: 12px;
-                border-radius: 3px;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
                 margin-right: 12px;
                 flex-shrink: 0;
             }
             .tw-group-info {
                 flex: 1;
                 font-size: 13px;
+                color: #ced6e0;
             }
             .tw-group-item-count {
                 font-weight: 600;
-                font-size: 14px;
                 color: #fff;
+                font-size: 14px;
             }
-            
+
             .tw-unit-summary-grid {
                 display: grid;
                 grid-template-columns: repeat(6, 1fr);
                 gap: 10px;
             }
             .tw-unit-summary-card {
-                background: rgba(255,255,255,0.01);
-                border: 1px solid rgba(255,255,255,0.03);
+                background: rgba(0,0,0,0.25);
+                border: 1px solid rgba(255,255,255,0.04);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 10px;
                 text-align: center;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
             }
             .tw-unit-summary-card img {
-                width: 18px;
-                height: 18px;
-                margin-bottom: 6px;
+                width: 20px;
+                height: 20px;
             }
             .tw-unit-summary-card p {
-                margin: 0;
-                font-size: 11px;
+                margin: 4px 0 0 0;
+                font-size: 13px;
                 font-weight: 600;
+                color: #f1f2f6;
             }
-            
-            /* BB Code Tab Styles */
+
+            /* Villages Tab Table */
+            .tw-toolbar {
+                display: flex;
+                gap: 12px;
+                margin-bottom: 14px;
+                align-items: center;
+            }
+            .tw-input-search, .tw-select-filter {
+                background: rgba(0,0,0,0.3);
+                border: 1px solid rgba(255,255,255,0.1);
+                border-radius: 6px;
+                color: #fff;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-family: 'Outfit', sans-serif;
+            }
+            .tw-input-search {
+                flex: 1;
+            }
+            .tw-input-search:focus, .tw-select-filter:focus {
+                border-color: #ff9f43;
+                outline: none;
+            }
+            .tw-table-wrapper {
+                max-height: 420px;
+                overflow-y: auto;
+                border: 1px solid rgba(255,255,255,0.06);
+                border-radius: 8px;
+                background: rgba(0,0,0,0.15);
+            }
+            .tw-v-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+                text-align: left;
+            }
+            .tw-v-table th {
+                background: rgba(0,0,0,0.4);
+                color: #ff9f43;
+                padding: 10px 12px;
+                font-weight: 600;
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            .tw-v-table td {
+                padding: 8px 12px;
+                border-bottom: 1px solid rgba(255,255,255,0.03);
+                color: #ced6e0;
+                vertical-align: middle;
+            }
+            .tw-v-table tr:hover td {
+                background: rgba(255,255,255,0.02);
+            }
+            .tw-badge {
+                display: inline-block;
+                padding: 3px 8px;
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 600;
+                color: #fff;
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+            }
+            .tw-unit-icons-cell {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: center;
+            }
+            .tw-unit-tag {
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                background: rgba(0,0,0,0.3);
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            .tw-unit-tag img {
+                width: 14px;
+                height: 14px;
+            }
+            .tw-btn-action {
+                background: rgba(255, 159, 67, 0.15);
+                border: 1px solid rgba(255, 159, 67, 0.3);
+                color: #ff9f43;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .tw-btn-action:hover {
+                background: #ff9f43;
+                color: #121418;
+            }
+
+            /* BB Code Output */
             .tw-bb-container {
                 display: flex;
                 flex-direction: column;
-                height: 100%;
-            }
-            .tw-bb-textarea {
-                width: 100%;
-                height: 250px;
-                background: rgba(0,0,0,0.3);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 8px;
-                color: #ced6e0;
-                font-family: 'Courier New', Courier, monospace;
-                font-size: 12px;
-                padding: 12px;
-                resize: none;
-                box-sizing: border-box;
-                margin-bottom: 16px;
-            }
-            .tw-bb-textarea:focus {
-                border-color: #ff9f43;
-                outline: none;
+                gap: 12px;
             }
             .tw-bb-controls {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 18px;
             }
-            .tw-bb-format-select {
-                background: rgba(30,31,35,0.8);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 6px;
-                color: #f1f2f6;
-                padding: 6px 12px;
-                font-size: 13px;
-                cursor: pointer;
+            .tw-bb-textarea {
+                width: 100%;
+                height: 280px;
+                background: rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                color: #70a1ff;
+                font-family: monospace;
+                font-size: 12px;
+                padding: 14px;
+                box-sizing: border-box;
+                resize: vertical;
             }
             .tw-copy-btn {
-                background: linear-gradient(135deg, #ff9f43 0%, #ff5252 100%);
+                background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
                 border: none;
-                color: #fff;
-                font-family: 'Outfit', sans-serif;
+                color: white;
+                padding: 12px 20px;
                 font-size: 14px;
                 font-weight: 600;
-                padding: 12px 24px;
                 border-radius: 8px;
                 cursor: pointer;
                 box-shadow: 0 4px 15px rgba(255, 82, 82, 0.3);
@@ -798,78 +837,64 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                margin-top: 10px;
             }
             .tw-copy-btn:hover {
-                transform: translateY(-2px);
+                transform: translateY(-1px);
                 box-shadow: 0 6px 20px rgba(255, 82, 82, 0.4);
-            }
-            .tw-copy-btn:active {
-                transform: translateY(0);
             }
             .tw-copy-btn.success {
                 background: linear-gradient(135deg, #10ac84 0%, #00d2d3 100%);
                 box-shadow: 0 4px 15px rgba(16, 172, 132, 0.3);
             }
             
-            /* Settings Tab Styles */
+            /* Settings Grid */
             .tw-config-grid {
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
-                gap: 20px;
-                margin-bottom: 24px;
+                gap: 16px;
+                margin-bottom: 20px;
             }
             .tw-config-group {
                 display: flex;
                 flex-direction: column;
             }
             .tw-config-group label {
-                font-size: 12px;
+                font-size: 11px;
                 color: #a4b0be;
-                margin-bottom: 6px;
+                margin-bottom: 4px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
             }
             .tw-config-group input[type="number"] {
-                background: rgba(0,0,0,0.2);
+                background: rgba(0,0,0,0.25);
                 border: 1px solid rgba(255,255,255,0.08);
                 border-radius: 6px;
                 color: #fff;
                 padding: 8px 12px;
-                font-size: 14px;
-                font-family: 'Outfit', sans-serif;
+                font-size: 13px;
             }
-            .tw-config-group input[type="number"]:focus {
-                border-color: #ff9f43;
-                outline: none;
-            }
-            
             .tw-checkbox-container {
                 display: flex;
                 align-items: center;
-                margin-bottom: 8px;
+                margin-bottom: 6px;
                 cursor: pointer;
-                font-size: 13px;
+                font-size: 12px;
                 color: #ced6e0;
             }
             .tw-checkbox-container input {
-                margin-right: 10px;
-                cursor: pointer;
-                width: 16px;
-                height: 16px;
+                margin-right: 8px;
                 accent-color: #ff9f43;
             }
-            
             .tw-export-toggles {
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
-                gap: 8px;
-                margin-top: 14px;
+                gap: 6px;
+                margin-top: 10px;
             }
         `;
         document.head.appendChild(style);
 
-        // Calculate statistics
+        // Stats calculation
         const groupCounts = {};
         Object.keys(GROUP_DETAILS).forEach(k => groupCounts[k] = 0);
         
@@ -881,26 +906,33 @@
 
         villages.forEach(v => {
             const cat = classifyVillage(v);
+            v.category = cat;
             groupCounts[cat]++;
             
+            let vPop = 0;
             Object.keys(v.own).forEach(u => {
-                globalUnitCounts[u] += v.own[u];
-                totalPopulation += v.own[u] * (unitPopulations[u] || 1);
+                const cnt = v.own[u];
+                const pop = unitPopulations[u] || 1;
+                globalUnitCounts[u] += cnt;
+                vPop += cnt * pop;
             });
+            v.totalPop = vPop;
+            totalPopulation += vPop;
         });
 
-        // 9. Render Dialog HTML Structure
+        // Render HTML
         container.innerHTML = `
             <div class="tw-header">
                 <div class="tw-header-title">
-                    <h2>Contador de Tropas & BB Code Exporter</h2>
-                    <p>Tribal Wars Premium Script - Versão 2.0.0</p>
+                    <h2>Contador de Tropas & Exportador BB</h2>
+                    <p>Tribal Wars Premium Script - Versão 2.1.0</p>
                 </div>
                 <button class="tw-close-btn" id="tw-close-modal">&times;</button>
             </div>
             
             <div class="tw-nav">
-                <button class="tw-nav-tab active" data-tab="dashboard">Painel</button>
+                <button class="tw-nav-tab active" data-tab="dashboard">Painel Geral</button>
+                <button class="tw-nav-tab" data-tab="villages">Tropas por Aldeia</button>
                 <button class="tw-nav-tab" data-tab="bbcode">Exportar Código BB</button>
                 <button class="tw-nav-tab" data-tab="settings">Configurações</button>
             </div>
@@ -910,7 +942,7 @@
                 <div class="tw-tab-panel active" id="tw-tab-dashboard">
                     <div class="tw-stats-row">
                         <div class="tw-stat-card">
-                            <h4>Total Aldeias</h4>
+                            <h4>Total de Aldeias</h4>
                             <p>${totalVillages}</p>
                         </div>
                         <div class="tw-stat-card">
@@ -927,7 +959,7 @@
                     <div class="tw-group-grid">
                         ${Object.keys(GROUP_DETAILS).map(key => {
                             const count = groupCounts[key];
-                            if (count === 0) return ''; // hide groups with 0 villages
+                            if (count === 0) return '';
                             const pct = totalVillages ? Math.round((count / totalVillages) * 100) : 0;
                             return `
                                 <div class="tw-group-item">
@@ -939,7 +971,7 @@
                         }).join('')}
                     </div>
                     
-                    <h3 class="tw-section-title">Resumo Global de Unidades</h3>
+                    <h3 class="tw-section-title">Resumo Global de Tropas Próprias</h3>
                     <div class="tw-unit-summary-grid">
                         ${unitsOrder.map(u => {
                             const count = globalUnitCounts[u];
@@ -953,6 +985,37 @@
                         }).join('')}
                     </div>
                 </div>
+
+                <!-- Per-Village Tab -->
+                <div class="tw-tab-panel" id="tw-tab-villages">
+                    <div class="tw-toolbar">
+                        <input type="text" id="tw-search-villages" placeholder="Filtrar por nome ou coordenadas (ex: 555|444)..." class="tw-input-search">
+                        <select id="tw-filter-group" class="tw-select-filter">
+                            <option value="all">Todos os Grupos</option>
+                            ${Object.keys(GROUP_DETAILS).map(k => `<option value="${k}">${GROUP_DETAILS[k].label}</option>`).join('')}
+                        </select>
+                        <button class="tw-btn-action" id="tw-btn-copy-filtered-bb" style="padding: 8px 12px; font-weight: 600;">
+                            Copiar BB das Listadas
+                        </button>
+                    </div>
+
+                    <div class="tw-table-wrapper">
+                        <table class="tw-v-table" id="tw-table-villages">
+                            <thead>
+                                <tr>
+                                    <th>Aldeia</th>
+                                    <th>Categoria</th>
+                                    <th>Tropas Próprias</th>
+                                    <th>Pop.</th>
+                                    <th>Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tw-villages-tbody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
                 
                 <!-- BB Code Tab -->
                 <div class="tw-tab-panel" id="tw-tab-bbcode">
@@ -963,7 +1026,7 @@
                                 Ocultar tropas zeradas
                             </label>
                             
-                            <select class="tw-bb-format-select" id="tw-bb-format">
+                            <select class="tw-select-filter" id="tw-bb-format">
                                 <option value="icons" ${config.bbCodeFormat === 'icons' ? 'selected' : ''}>Ícones [unit]</option>
                                 <option value="text" ${config.bbCodeFormat === 'text' ? 'selected' : ''}>Apenas Texto</option>
                                 <option value="coords" ${config.bbCodeFormat === 'coords' ? 'selected' : ''}>Apenas Coordenadas</option>
@@ -973,7 +1036,7 @@
                         <textarea class="tw-bb-textarea" id="tw-bb-output" readonly></textarea>
                         
                         <button class="tw-copy-btn" id="tw-btn-copy">
-                            Copiar Código BB
+                            Copiar Código BB Global
                         </button>
                     </div>
                 </div>
@@ -1004,7 +1067,7 @@
                         </div>
                     </div>
                     
-                    <h3 class="tw-section-title">Grupos a Exportar no BB Code</h3>
+                    <h3 class="tw-section-title">Grupos a Exportar no BB Code Global</h3>
                     <div class="tw-export-toggles">
                         ${Object.keys(GROUP_DETAILS).map(key => `
                             <label class="tw-checkbox-container">
@@ -1017,15 +1080,74 @@
             </div>
         `;
 
-        // 10. Wire Events
         const $modal = $('#tw-counter-modal');
-        
-        // Close modal
+
+        // Render Villages Table
+        function renderVillagesTable() {
+            const searchTerm = $modal.find('#tw-search-villages').val().toLowerCase().trim();
+            const groupFilter = $modal.find('#tw-filter-group').val();
+            const $tbody = $modal.find('#tw-villages-tbody');
+
+            const filtered = villages.filter(v => {
+                const matchesSearch = !searchTerm || v.fullName.toLowerCase().includes(searchTerm) || v.coords.includes(searchTerm);
+                const matchesGroup = groupFilter === 'all' || v.category === groupFilter;
+                return matchesSearch && matchesGroup;
+            });
+
+            if (filtered.length === 0) {
+                $tbody.html(`<tr><td colspan="5" style="text-align: center; color: #a4b0be; padding: 20px;">Nenhuma aldeia encontrada para estes filtros.</td></tr>`);
+                return;
+            }
+
+            const rowsHtml = filtered.map((v, idx) => {
+                const groupInfo = GROUP_DETAILS[v.category];
+                const unitBadges = unitsOrder.map(u => {
+                    const cnt = v.own[u] || 0;
+                    if (cnt === 0) return '';
+                    return `
+                        <span class="tw-unit-tag">
+                            <img src="https://${window.location.hostname}/graphic/unit/unit_${u}.png" title="${unitNames[u]}">
+                            ${cnt.toLocaleString()}
+                        </span>
+                    `;
+                }).join('');
+
+                return `
+                    <tr>
+                        <td>
+                            <strong>${v.name}</strong><br>
+                            <span style="font-family: monospace; color: #70a1ff;">[coord]${v.coords}[/coord]</span>
+                        </td>
+                        <td>
+                            <span class="tw-badge" style="background-color: ${groupInfo.color}">
+                                ${groupInfo.label}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="tw-unit-icons-cell">
+                                ${unitBadges || '<span style="color:#747d8c;">Sem tropas</span>'}
+                            </div>
+                        </td>
+                        <td style="font-weight: 600; color: #ff9f43;">${v.totalPop.toLocaleString()}</td>
+                        <td>
+                            <button class="tw-btn-action tw-btn-copy-single" data-idx="${villages.indexOf(v)}">
+                                Copiar BB
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            $tbody.html(rowsHtml);
+        }
+
+        renderVillagesTable();
+
+        // Event Bindings
         $modal.find('#tw-close-modal').on('click', function() {
             $modal.remove();
         });
 
-        // Tab switches
         $modal.find('.tw-nav-tab').on('click', function() {
             const tab = $(this).data('tab');
             $modal.find('.tw-nav-tab').removeClass('active');
@@ -1039,29 +1161,73 @@
             }
         });
 
-        // Live update of BB Code on controls change
+        $modal.find('#tw-search-villages, #tw-filter-group').on('input change', function() {
+            renderVillagesTable();
+        });
+
+        // Copy single village BB
+        $modal.on('click', '.tw-btn-copy-single', function() {
+            const idx = $(this).data('idx');
+            const v = villages[idx];
+            const bbLine = buildVillageBBLine(v, unitsOrder, config.bbCodeFormat);
+            
+            navigator.clipboard.writeText(bbLine).then(() => {
+                const $btn = $(this);
+                $btn.text('Copiado! ✓').css('background', '#10ac84').css('color', '#fff');
+                setTimeout(() => {
+                    $btn.text('Copiar BB').css('background', '').css('color', '');
+                }, 1500);
+            }).catch(() => {
+                alert('Copie manualmente:\n\n' + bbLine);
+            });
+        });
+
+        // Copy all filtered villages BB
+        $modal.find('#tw-btn-copy-filtered-bb').on('click', function() {
+            const searchTerm = $modal.find('#tw-search-villages').val().toLowerCase().trim();
+            const groupFilter = $modal.find('#tw-filter-group').val();
+
+            const filtered = villages.filter(v => {
+                const matchesSearch = !searchTerm || v.fullName.toLowerCase().includes(searchTerm) || v.coords.includes(searchTerm);
+                const matchesGroup = groupFilter === 'all' || v.category === groupFilter;
+                return matchesSearch && matchesGroup;
+            });
+
+            if (filtered.length === 0) {
+                alert('Nenhuma aldeia selecionada no filtro.');
+                return;
+            }
+
+            const bbText = filtered.map(v => buildVillageBBLine(v, unitsOrder, config.bbCodeFormat)).join('\n');
+            
+            navigator.clipboard.writeText(bbText).then(() => {
+                const $btn = $(this);
+                $btn.text('Copiado (' + filtered.length + ')! ✓').css('background', '#10ac84');
+                setTimeout(() => {
+                    $btn.text('Copiar BB das Listadas').css('background', '');
+                }, 2000);
+            }).catch(() => {
+                alert('Código BB:\n\n' + bbText);
+            });
+        });
+
         function updateBBCodeOutput() {
-            const code = buildBBCode(villages, unitsOrder);
+            const code = buildGlobalBBCode(villages, unitsOrder);
             $modal.find('#tw-bb-output').val(code);
         }
 
-        $modal.find('#tw-hide-zeros').on('change', function() {
-            config.hideZeroUnits = this.checked;
+        $modal.find('#tw-hide-zeros, #tw-bb-format').on('change', function() {
+            config.hideZeroUnits = $modal.find('#tw-hide-zeros').is(':checked');
+            config.bbCodeFormat = $modal.find('#tw-bb-format').val();
             saveSettings();
             updateBBCodeOutput();
+            renderVillagesTable();
         });
 
-        $modal.find('#tw-bb-format').on('change', function() {
-            config.bbCodeFormat = this.value;
-            saveSettings();
-            updateBBCodeOutput();
-        });
-
-        // Copy button trigger
         $modal.find('#tw-btn-copy').on('click', function() {
             const textarea = $modal.find('#tw-bb-output')[0];
             textarea.select();
-            textarea.setSelectionRange(0, 99999); // for mobile devices
+            textarea.setSelectionRange(0, 99999);
             
             try {
                 const successful = document.execCommand('copy');
@@ -1069,7 +1235,7 @@
                     const btn = $(this);
                     btn.addClass('success').text('Copiado com Sucesso! ✓');
                     setTimeout(() => {
-                        btn.removeClass('success').text('Copiar Código BB');
+                        btn.removeClass('success').text('Copiar Código BB Global');
                     }, 2000);
                 } else {
                     alert('Falha ao copiar. Selecione o texto e copie manualmente.');
@@ -1079,7 +1245,6 @@
             }
         });
 
-        // Settings change listeners
         $modal.find('#tw-cfg-full, #tw-cfg-34, #tw-cfg-12, #tw-cfg-14, #tw-cfg-cat').on('input change', function() {
             config.fullThreshold = parseInt($modal.find('#tw-cfg-full').val(), 10) || 0;
             config.threeQuartersThreshold = parseInt($modal.find('#tw-cfg-34').val(), 10) || 0;

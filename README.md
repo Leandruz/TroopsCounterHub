@@ -1,28 +1,24 @@
 # TroopsCounterHub ⚔️🛡️
 
-Um script avançado e elegante para **Tribal Wars** de contagem de tropas e exportador de códigos BB para relatórios e planejamentos.
+Um script avançado e elegante para **Tribal Wars** de contagem de tropas, análise individual por aldeia e exportador de códigos BB para o fórum da tribo ou perfil do jogador.
 
 ## 📌 Funcionalidades
 
-- **Contagem Completa de Tropas:** Analisa tropas próprias, na aldeia, em apoio e em viagem.
-- **Cálculo de População (Fazenda):** Exibe a quantidade exata de população ocupada por tipo de unidade e por grupo de aldeias.
-- **Filtros e Visualização Interativa:** Interface dinâmica com tema escuro (Dark Mode), tipografia moderna e métricas detalhadas.
-- **Gerador de Código BB:** Exportação simplificada para postagens no fórum da tribo ou mensagens privadas.
+- **Painel Geral:** Estatísticas completas de tropas (próprias, em apoio e a caminho) e população militar ocupada.
+- **Aba "Tropas por Aldeia":** Lista individualizada de cada aldeia com contagem exata de unidades, badges coloridas de categoria (Nuke, Defesa, Nobres, etc.), filtro por busca/coordenadas e botão de cópia individual ou em lote.
+- **Gerador de Código BB Global:** Exportação de relatório com spoilers por categoria para fórum ou perfil.
+- **Redirecionamento Inteligente:** Se clicado fora da página de tropas, redireciona automaticamente para `Visualizações -> Tropas`.
+
+---
 
 ## 🚀 Como Usar no Tribal Wars
 
 ### 1. Criar o Bookmarklet (Favorito no Navegador)
 
-Crie um novo favorito na barra de favoritos do seu navegador e insira o seguinte código no campo **URL**:
+Crie um favorito na barra de favoritos do seu navegador e insira o seguinte código na **URL**:
 
-#### **Opção Recomendada (Injeção Dinâmica com Cache-Buster):**
 ```javascript
 javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js?v='+Date.now();document.body.appendChild(s);})();
-```
-
-#### **Opção Alternativa (via $.getScript):**
-```javascript
-javascript:$.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js?v='+Date.now());
 ```
 
 ---
@@ -30,13 +26,13 @@ javascript:$.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@ma
 ### 2. Executar no Jogo
 
 1. Entre no **Tribal Wars**.
-2. Acesse a tela de **Visualização Geral de Tropas** (`Visualizações -> Tropas` ou URL com `screen=overview_villages&mode=units`).
-3. Clique no favorito (bookmarklet) salvo no seu navegador.
-4. O painel do **TroopsCounterHub** será exibido instantaneamente!
+2. Clique no favorito do **TroopsCounterHub** no seu navegador.
+3. Se estiver em qualquer outra página, o script redirecionará automaticamente para **Visualização Geral de Tropas** (`screen=overview_villages&mode=units`).
+4. Ao abrir, a janela modal interativa será exibida instantaneamente!
 
 ---
 
 ## 🛠️ Tecnologias
 - JavaScript (ES6+)
 - jQuery (Ambiente Tribal Wars)
-- Custom CSS / Modal com Design Moderno
+- Custom CSS / Modal Dark Mode com Design Moderno
