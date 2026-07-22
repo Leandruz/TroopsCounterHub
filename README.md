@@ -23,7 +23,7 @@ Baseado no script original **Licznik wojska** (To6iasz / natanprog), expandido c
 Crie um favorito no navegador com o seguinte código no campo **URL**:
 
 ```
-javascript:$.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@9c29718/troopsCounterBB.js');void 0;
+javascript:$.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@9524e0e/troopsCounterBB.js');void 0;
 ```
 
 > ⚠️ Se o navegador remover o `javascript:` do início ao colar, digite `javascript:` manualmente antes do restante.
