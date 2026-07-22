@@ -3,7 +3,7 @@
     Based on: Licznik wojska by To6iasz, edited by Rinne, natanprog
     Enhanced by: Leandro Correa (Leandruz)
     Repository: https://github.com/Leandruz/TroopsCounterHub
-    Version: 3.0.0
+    Version: 3.1.0
 
     Bookmarklet:
     javascript:$.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js');void 0;
@@ -41,7 +41,10 @@ if (!window.troopCounter) window.troopCounter = {};
             "Voltar ao Resumo",              // 19
             "Copiar BB Code",                // 20
             "Copiado!",                      // 21
-            "Exportar BB por Aldeia"         // 22
+            "Exportar BB por Aldeia",        // 22
+            "Filtrar Grupo: ",               // 23
+            "Carregando grupos...",          // 24
+            "Grupo"                          // 25
         ];
         tc.unitNamesPT = "Lanceiro,Espadachim,Bárbaro,Arqueiro,Explorador,Cavalaria_Leve,Arqueiro_a_cavalo,Cavalaria_Pesada,Aríete,Catapulta,Paladino,Nobres".split(",");
     } else {
@@ -68,7 +71,10 @@ if (!window.troopCounter) window.troopCounter = {};
             "Back to Summary",
             "Copy BB Code",
             "Copied!",
-            "Export BB per Village"
+            "Export BB per Village",
+            "Filter Group: ",
+            "Loading groups...",
+            "Group"
         ];
         tc.unitNamesPT = "Spear_fighter,Swordsman,Axeman,Archer,Scout,Light_cavalry,Mounted_archer,Heavy_cavalry,Ram,Catapult,Paladin,Nobleman".split(",");
     }
@@ -81,12 +87,19 @@ if (!window.troopCounter) window.troopCounter = {};
     if (game_data.player.sitter != 0)
         tc.link = "/game.php?t=" + game_data.player.id + "&village=" + game_data.village.id + "&type=complete&mode=units&group=0&page=-1&screen=overview_villages";
 
-    // Store parsed village data
+    // State
     tc.villageData = [];
     tc.parsedTable = null;
     tc.sumaWojsk = [];
     tc.currentRow = "0";
-    tc.currentView = "summary"; // "summary" or "villages"
+    tc.currentView = "summary";
+
+    // Group mapping: coordenada -> [nomes de grupo]
+    tc.groupList = [];          // [{name: "Off", url: "..."}, ...]
+    tc.villageGroupMap = {};    // { "123|456": ["Off", "Nobres"], ... }
+    tc.groupsLoaded = false;
+    tc.groupsLoadingCount = 0;
+    tc.villageFilterGroup = "all"; // filtro da tabela de aldeias
 
     // Build dialog HTML
     var html = "<h2 align='center'>" + lang[0] + "</h2>";
@@ -115,10 +128,21 @@ if (!window.troopCounter) window.troopCounter = {};
 
     // Village detail section (hidden initially)
     html += "<div id='tc_village_section' style='display:none; margin-top:8px;'>";
-    html += "<table width='100%' class='vis'>";
-    html += "<thead><tr><th>Aldeia</th><th colspan='" + tc.unitKeys.length + "'>Tropas</th></tr></thead>";
+
+    // Group filter for village table
+    html += "<div style='margin-bottom:6px;'>";
+    html += "<b>" + lang[23] + "</b>";
+    html += "<select id='tc_village_group_filter' onchange=\"troopCounter.villageFilterGroup = this.value; troopCounter.renderVillageTable();\">";
+    html += "<option value='all'>" + lang[2] + "</option>";
+    html += "</select>";
+    html += " <span id='tc_group_loading_status' style='font-size:11px; color:#888;'></span>";
+    html += "</div>";
+
+    html += "<div style='max-height:400px; overflow-y:auto;'>";
+    html += "<table width='100%' class='vis' id='tc_village_table'>";
     html += "<tbody id='tc_village_tbody'></tbody>";
     html += "</table>";
+    html += "</div>";
     html += "<div style='text-align:center; margin-top:6px;'>";
     html += "<a href='#' onclick=\"troopCounter.copyVillageBB(); return false;\" class='btn' id='tc_copy_bb_btn'>" + lang[20] + "</a>";
     html += "</div>";
@@ -154,10 +178,16 @@ if (!window.troopCounter) window.troopCounter = {};
                         for (var i = 0; i < grupy.length; i++) {
                             var nazwa = grupy[i].textContent;
                             if (mobile && nazwa == "wszystkie") continue;
+                            var groupUrl = grupy[i].getAttribute(mobile ? "value" : "href") + "&page=-1";
+                            var groupName = mobile ? nazwa : nazwa.slice(1, nazwa.length - 1);
+
                             $("#tcGroupSelect").append($("<option>", {
-                                value: grupy[i].getAttribute(mobile ? "value" : "href") + "&page=-1",
-                                text: mobile ? nazwa : nazwa.slice(1, nazwa.length - 1)
+                                value: groupUrl,
+                                text: groupName
                             }));
+
+                            // Store group info for mapping
+                            tc.groupList.push({ name: groupName, url: groupUrl });
                         }
                     }
                     tc.pobraneGrupy = true;
@@ -170,6 +200,12 @@ if (!window.troopCounter) window.troopCounter = {};
                     if (!tc.parsedTable.rows[0].innerHTML.match("knight")) {
                         tc.unitKeys.splice(tc.unitKeys.indexOf("knight"), 1);
                     }
+
+                    // Populate village group filter dropdown
+                    tc.populateGroupFilter();
+
+                    // Start background group mapping
+                    tc.loadGroupMappings();
                 }
 
                 if (tc.parsedTable.rows.length > 4000) alert(lang[14]);
@@ -183,6 +219,89 @@ if (!window.troopCounter) window.troopCounter = {};
             }
         };
         xhr.send(null);
+    };
+
+    // Populate the village-level group filter dropdown
+    tc.populateGroupFilter = function () {
+        var $filter = $("#tc_village_group_filter");
+        for (var i = 0; i < tc.groupList.length; i++) {
+            $filter.append($("<option>", {
+                value: tc.groupList[i].name,
+                text: tc.groupList[i].name
+            }));
+        }
+    };
+
+    // Load group mappings in background (fetch each group to get village coords)
+    tc.loadGroupMappings = function () {
+        if (tc.groupList.length === 0) {
+            tc.groupsLoaded = true;
+            return;
+        }
+
+        tc.groupsLoadingCount = tc.groupList.length;
+        $("#tc_group_loading_status").text(lang[24] + " (0/" + tc.groupList.length + ")");
+
+        for (var g = 0; g < tc.groupList.length; g++) {
+            (function (groupIndex) {
+                var group = tc.groupList[groupIndex];
+                var xhr = new XMLHttpRequest();
+                xhr.open("GET", group.url, true);
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState == 4 && xhr.status == 200) {
+                        var tempBody = document.createElement("body");
+                        tempBody.innerHTML = xhr.responseText;
+                        var table = $(tempBody).find("#units_table").get()[0];
+
+                        if (table) {
+                            // Extract village coords from this group's table
+                            for (var i = 1; i < table.rows.length; i += 5) {
+                                var row = table.rows[i];
+                                if (!row || row.cells.length < 2) continue;
+                                var cellText = row.cells[0].textContent;
+                                var match = cellText.match(/(\d+)\|(\d+)/);
+                                if (match) {
+                                    var coords = match[0];
+                                    if (!tc.villageGroupMap[coords]) {
+                                        tc.villageGroupMap[coords] = [];
+                                    }
+                                    if (tc.villageGroupMap[coords].indexOf(group.name) === -1) {
+                                        tc.villageGroupMap[coords].push(group.name);
+                                    }
+                                }
+                            }
+                        }
+
+                        tc.groupsLoadingCount--;
+                        var done = tc.groupList.length - tc.groupsLoadingCount;
+                        $("#tc_group_loading_status").text(lang[24] + " (" + done + "/" + tc.groupList.length + ")");
+
+                        if (tc.groupsLoadingCount <= 0) {
+                            tc.groupsLoaded = true;
+                            $("#tc_group_loading_status").text("✓");
+                            setTimeout(function () {
+                                $("#tc_group_loading_status").text("");
+                            }, 2000);
+
+                            // Re-render if village view is active
+                            if (tc.currentView === "villages") {
+                                tc.renderVillageTable();
+                            }
+                        }
+                    }
+                };
+                // Stagger requests to avoid overwhelming the server (200ms apart)
+                setTimeout(function () {
+                    xhr.send(null);
+                }, groupIndex * 200);
+            })(g);
+        }
+    };
+
+    // Get groups for a village by coords
+    tc.getVillageGroups = function (coords) {
+        if (!coords || !tc.villageGroupMap[coords]) return [];
+        return tc.villageGroupMap[coords];
     };
 
     // Sum troops by row type
@@ -214,7 +333,6 @@ if (!window.troopCounter) window.troopCounter = {};
             var row = table.rows[i];
             if (!row || row.cells.length < 2) continue;
 
-            // Village name & coords from first cell
             var nameCell = row.cells[0];
             var link = nameCell.querySelector("a");
             var fullName = link ? link.textContent.trim() : nameCell.textContent.trim();
@@ -224,10 +342,9 @@ if (!window.troopCounter) window.troopCounter = {};
             var village = {
                 name: fullName,
                 coords: coords,
-                troops: [] // rows: 0=own, 1=inVillage, 2=outwards, 3=transit, 4=total(?)
+                troops: []
             };
 
-            // Parse 5 rows per village
             for (var r = 0; r < 5; r++) {
                 var rowIdx = i + r;
                 if (rowIdx >= table.rows.length) break;
@@ -244,7 +361,7 @@ if (!window.troopCounter) window.troopCounter = {};
         }
     };
 
-    // Change type (available, own, in village, support, outwards, transit)
+    // Change type
     tc.changeType = function (value) {
         tc.currentRow = value;
         var which = String(value).match(/\d+/g);
@@ -265,9 +382,14 @@ if (!window.troopCounter) window.troopCounter = {};
         }
 
         tc.displaySummary(result);
+
+        // Also refresh village table if visible
+        if (tc.currentView === "villages") {
+            tc.renderVillageTable();
+        }
     };
 
-    // Display summary (original layout with unit icons)
+    // Display summary
     tc.displaySummary = function (sums) {
         var numUnits = tc.unitKeys.length;
         var elem = "<tr>";
@@ -288,7 +410,7 @@ if (!window.troopCounter) window.troopCounter = {};
         $("#tc_village_count").html(lang[16] + numVillages + lang[17]);
     };
 
-    // Spaces helper for export
+    // Spaces helper
     tc.spaces = function (num) {
         var s = String(num);
         var r = "";
@@ -319,29 +441,41 @@ if (!window.troopCounter) window.troopCounter = {};
         }
     };
 
-    // Render per-village table
+    // Render per-village table with group column and filter
     tc.renderVillageTable = function () {
         if (!tc.villageData || tc.villageData.length === 0) {
-            $("#tc_village_tbody").html("<tr><td colspan='" + (tc.unitKeys.length + 1) + "'>Nenhuma aldeia encontrada.</td></tr>");
+            $("#tc_village_tbody").html("<tr><td colspan='" + (tc.unitKeys.length + 2) + "'>Nenhuma aldeia encontrada.</td></tr>");
             return;
         }
 
         var numUnits = tc.unitKeys.length;
-
-        // Determine which row type to show based on current selection
         var which = String(tc.currentRow).match(/\d+/g);
         var ops = String(tc.currentRow).match(/[a-z]/g);
+        var filterGroup = tc.villageFilterGroup;
 
-        // Header with unit icons
-        var headerHtml = "<tr><th style='text-align:left;'>Aldeia</th>";
+        // Header with unit icons + Group column
+        var headerHtml = "<tr>";
+        headerHtml += "<th style='text-align:left;'>Aldeia</th>";
+        headerHtml += "<th style='text-align:center;'>" + lang[25] + "</th>";
         for (var j = 0; j < numUnits; j++) {
             headerHtml += "<th><img src='" + image_base + "unit/unit_" + tc.unitKeys[j] + ".png' title='" + tc.unitKeys[j] + "'></th>";
         }
         headerHtml += "</tr>";
 
         var rowsHtml = "";
+        var filteredCount = 0;
+
         for (var v = 0; v < tc.villageData.length; v++) {
             var village = tc.villageData[v];
+            var groups = tc.getVillageGroups(village.coords);
+            var groupText = groups.length > 0 ? groups.join(", ") : "-";
+
+            // Apply group filter
+            if (filterGroup !== "all") {
+                if (groups.indexOf(filterGroup) === -1) continue;
+            }
+
+            filteredCount++;
 
             // Calculate troop counts based on selected type
             var counts = [];
@@ -359,8 +493,10 @@ if (!window.troopCounter) window.troopCounter = {};
                 }
             }
 
-            var bgColor = v % 2 == 0 ? "#fff5da" : "#ffe3a1";
+            var bgColor = filteredCount % 2 == 0 ? "#fff5da" : "#ffe3a1";
             rowsHtml += "<tr style='background:" + bgColor + ";'>";
+
+            // Village name/coords
             rowsHtml += "<td style='white-space:nowrap; font-size:11px;'>";
             if (village.coords) {
                 rowsHtml += "<b>" + village.coords + "</b>";
@@ -369,6 +505,18 @@ if (!window.troopCounter) window.troopCounter = {};
             }
             rowsHtml += "</td>";
 
+            // Group column
+            rowsHtml += "<td style='text-align:center; font-size:10px; max-width:100px; word-wrap:break-word;'>";
+            if (groups.length > 0) {
+                for (var gi = 0; gi < groups.length; gi++) {
+                    rowsHtml += "<span style='background:#e8d9a0; padding:1px 4px; border-radius:3px; margin:1px; display:inline-block;'>" + groups[gi] + "</span>";
+                }
+            } else {
+                rowsHtml += "<span style='color:#ccc;'>-</span>";
+            }
+            rowsHtml += "</td>";
+
+            // Troop columns
             for (var j = 0; j < numUnits; j++) {
                 var val = counts[j];
                 var style = "text-align:center; font-size:11px;";
@@ -378,23 +526,34 @@ if (!window.troopCounter) window.troopCounter = {};
             rowsHtml += "</tr>";
         }
 
+        if (filteredCount === 0) {
+            rowsHtml = "<tr><td colspan='" + (numUnits + 2) + "' style='text-align:center; padding:8px;'>Nenhuma aldeia neste grupo.</td></tr>";
+        }
+
         $("#tc_village_tbody").html(headerHtml + rowsHtml);
 
-        // Generate BB code for all villages
+        // Generate BB code for filtered villages
         tc.generateVillageBB();
     };
 
-    // Generate BB code per village
+    // Generate BB code per village (respecting group filter)
     tc.generateVillageBB = function () {
         if (!tc.villageData || tc.villageData.length === 0) return;
 
         var numUnits = tc.unitKeys.length;
         var which = String(tc.currentRow).match(/\d+/g);
         var ops = String(tc.currentRow).match(/[a-z]/g);
+        var filterGroup = tc.villageFilterGroup;
 
         var bb = "";
         for (var v = 0; v < tc.villageData.length; v++) {
             var village = tc.villageData[v];
+
+            // Apply group filter
+            if (filterGroup !== "all") {
+                var groups = tc.getVillageGroups(village.coords);
+                if (groups.indexOf(filterGroup) === -1) continue;
+            }
 
             var counts = [];
             for (var j = 0; j < numUnits; j++) counts[j] = 0;
