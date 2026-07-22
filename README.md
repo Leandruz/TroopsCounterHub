@@ -18,7 +18,7 @@ Um script avançado e elegante para **Tribal Wars** de contagem de tropas, anál
 Crie um favorito na barra de favoritos do seu navegador e insira o seguinte código na **URL**:
 
 ```javascript
-javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js?v='+Date.now();document.body.appendChild(s);})();
+javascript:(function(){var s=document.createElement('script');s.src='https://raw.githubusercontent.com/Leandruz/TroopsCounterHub/main/troopsCounterBB.js?v='+Date.now();document.body.appendChild(s);})();
 ```
 
 ---
