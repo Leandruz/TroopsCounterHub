@@ -1,43 +1,40 @@
 # TroopsCounterHub ⚔️🛡️
 
-Um script avançado e elegante para **Tribal Wars** de contagem de tropas, análise individual por aldeia e exportador de códigos BB para o fórum da tribo ou perfil do jogador.
+Contador de Tropas avançado para **Tribal Wars** com visualização por aldeia e exportação de código BB.
+
+Baseado no script original **Licznik wojska** (To6iasz / natanprog), expandido com funcionalidades extras.
 
 ## 📌 Funcionalidades
 
-- **Painel Geral:** Estatísticas completas de tropas (próprias, em apoio e a caminho) e população militar ocupada.
-- **Aba "Tropas por Aldeia":** Lista individualizada de cada aldeia com contagem exata de unidades, badges coloridas de categoria (Nuke, Defesa, Nobres, etc.), filtro por busca/coordenadas e botão de cópia individual ou em lote.
-- **Gerador de Código BB Global:** Exportação de relatório com spoilers por categoria para fórum ou perfil.
-- **Redirecionamento Inteligente:** Se clicado fora da página de tropas, redireciona automaticamente para `Visualizações -> Tropas`.
+- **Contador de Tropas Global:** Resumo total de tropas por tipo (Disponível, Próprias, Na Aldeia, Apoios, Fora, Em Trânsito).
+- **Seleção por Grupo:** Filtra por qualquer grupo de aldeias configurado no jogo.
+- **Tropas por Aldeia:** Mostra tropas individualizadas de cada aldeia, respeitando o filtro de tipo selecionado.
+- **Exportação BB Code:** Gera código BB do resumo global e também por aldeia individual para colar no fórum ou perfil.
+- **Interface Nativa do Jogo:** Usa o popup nativo do Tribal Wars (`Dialog.show`), compatível com todos os mundos.
 
 ---
 
-## 🚀 Como Usar no Tribal Wars
+## 🚀 Como Usar
 
-### 1. Criar o Bookmarklet (Favorito no Navegador)
+### 1. Criar o Bookmarklet
 
-1. Clique com o **botão direito** na barra de favoritos do seu navegador.
-2. Selecione **"Adicionar página..."** (ou "Adicionar Favorito").
-3. No campo **Nome**, coloque: `TroopsCounter`
-4. No campo **URL**, cole **exatamente** o código abaixo:
+Crie um favorito no navegador com o seguinte código no campo **URL**:
 
 ```
-javascript:void($.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js'))
+javascript:$.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@8980bfa/troopsCounterBB.js');void 0;
 ```
 
-> ⚠️ **IMPORTANTE:** O navegador pode remover automaticamente o `javascript:` do início quando você cola. Se isso acontecer, **digite `javascript:` manualmente** antes do restante do código.
-
----
+> ⚠️ Se o navegador remover o `javascript:` do início ao colar, digite `javascript:` manualmente antes do restante.
 
 ### 2. Executar no Jogo
 
-1. Entre no **Tribal Wars**.
-2. Clique no favorito **TroopsCounter** no seu navegador.
-3. Se estiver em qualquer outra página, o script redirecionará automaticamente para a tela de Tropas.
-4. Ao abrir na tela de Tropas, a janela modal interativa será exibida!
+1. Entre no **Tribal Wars** em qualquer tela.
+2. Clique no favorito **TroopsCounter**.
+3. O popup nativo do jogo será exibido com o contador de tropas!
 
 ---
 
 ## 🛠️ Tecnologias
-- JavaScript (ES6+)
-- jQuery 3.5.1 (já incluído no Tribal Wars)
-- Custom CSS / Modal Dark Mode com Design Moderno
+- JavaScript (ES5 compatível)
+- jQuery + Dialog.show (APIs nativas do Tribal Wars)
+- XMLHttpRequest para buscar dados de todas as aldeias
