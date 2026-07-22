@@ -197,11 +197,23 @@ if (!window.troopCounter) window.troopCounter = {};
 
                     // Detect available units
                     if (!tc.parsedTable.rows[0].innerHTML.match("archer")) {
-                        tc.unitKeys.splice(tc.unitKeys.indexOf("archer"), 1);
-                        tc.unitKeys.splice(tc.unitKeys.indexOf("marcher"), 1);
+                        var archerIdx = tc.unitKeys.indexOf("archer");
+                        if (archerIdx !== -1) {
+                            tc.unitKeys.splice(archerIdx, 1);
+                            tc.unitNamesPT.splice(archerIdx, 1);
+                        }
+                        var marcherIdx = tc.unitKeys.indexOf("marcher");
+                        if (marcherIdx !== -1) {
+                            tc.unitKeys.splice(marcherIdx, 1);
+                            tc.unitNamesPT.splice(marcherIdx, 1);
+                        }
                     }
                     if (!tc.parsedTable.rows[0].innerHTML.match("knight")) {
-                        tc.unitKeys.splice(tc.unitKeys.indexOf("knight"), 1);
+                        var knightIdx = tc.unitKeys.indexOf("knight");
+                        if (knightIdx !== -1) {
+                            tc.unitKeys.splice(knightIdx, 1);
+                            tc.unitNamesPT.splice(knightIdx, 1);
+                        }
                     }
 
                     // Populate village group filter dropdown
