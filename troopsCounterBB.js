@@ -2,11 +2,10 @@
  * Tribal Wars Troops Counter & BB Code Exporter
  * Author: Leandro Correa (Leandruz)
  * Repository: https://github.com/Leandruz/TroopsCounterHub
- * Version: 2.2.0
+ * Version: 2.2.1
  * 
- * Instructions:
- * Create a bookmarklet in your browser with the following URL:
- * javascript:(function(){var s=document.createElement('script');s.src='https://raw.githubusercontent.com/Leandruz/TroopsCounterHub/main/troopsCounterBB.js?v='+Date.now();document.body.appendChild(s);})();
+ * Bookmarklet (copiar para a URL de um novo favorito no navegador):
+ * javascript:void($.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js'))
  */
 
 (function () {

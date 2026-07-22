@@ -15,24 +15,29 @@ Um script avançado e elegante para **Tribal Wars** de contagem de tropas, anál
 
 ### 1. Criar o Bookmarklet (Favorito no Navegador)
 
-Crie um favorito na barra de favoritos do seu navegador e insira o seguinte código na **URL**:
+1. Clique com o **botão direito** na barra de favoritos do seu navegador.
+2. Selecione **"Adicionar página..."** (ou "Adicionar Favorito").
+3. No campo **Nome**, coloque: `TroopsCounter`
+4. No campo **URL**, cole **exatamente** o código abaixo:
 
-```javascript
-javascript:(function(){var s=document.createElement('script');s.src='https://raw.githubusercontent.com/Leandruz/TroopsCounterHub/main/troopsCounterBB.js?v='+Date.now();document.body.appendChild(s);})();
 ```
+javascript:void($.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js'))
+```
+
+> ⚠️ **IMPORTANTE:** O navegador pode remover automaticamente o `javascript:` do início quando você cola. Se isso acontecer, **digite `javascript:` manualmente** antes do restante do código.
 
 ---
 
 ### 2. Executar no Jogo
 
 1. Entre no **Tribal Wars**.
-2. Clique no favorito do **TroopsCounterHub** no seu navegador.
-3. Se estiver em qualquer outra página, o script redirecionará automaticamente para **Visualização Geral de Tropas** (`screen=overview_villages&mode=units`).
-4. Ao abrir, a janela modal interativa será exibida instantaneamente!
+2. Clique no favorito **TroopsCounter** no seu navegador.
+3. Se estiver em qualquer outra página, o script redirecionará automaticamente para a tela de Tropas.
+4. Ao abrir na tela de Tropas, a janela modal interativa será exibida!
 
 ---
 
 ## 🛠️ Tecnologias
 - JavaScript (ES6+)
-- jQuery (Ambiente Tribal Wars)
+- jQuery 3.5.1 (já incluído no Tribal Wars)
 - Custom CSS / Modal Dark Mode com Design Moderno
