@@ -545,13 +545,15 @@ if (!window.troopCounter) window.troopCounter = {};
         var ops = String(tc.currentRow).match(/[a-z]/g);
         var filterGroup = tc.villageFilterGroup;
 
-        var bb = "";
+        var bb = "[table]\n";
+        bb += "[**]Aldeia[||]Grupo[||]Tropas[/**]\n";
+
         for (var v = 0; v < tc.villageData.length; v++) {
             var village = tc.villageData[v];
+            var groups = tc.getVillageGroups(village.coords);
 
             // Apply group filter
             if (filterGroup !== "all") {
-                var groups = tc.getVillageGroups(village.coords);
                 if (groups.indexOf(filterGroup) === -1) continue;
             }
 
@@ -570,17 +572,21 @@ if (!window.troopCounter) window.troopCounter = {};
                 }
             }
 
-            if (village.coords) {
-                bb += "[coord]" + village.coords + "[/coord] ";
-            }
+            var groupText = groups.length > 0 ? groups.join(", ") : "-";
+            var villageText = village.coords ? "[coord]" + village.coords + "[/coord]" : village.name.substring(0, 30);
+
+            bb += "[*]" + villageText + "[|]" + groupText + "[|]";
+
             var parts = [];
             for (var j = 0; j < numUnits; j++) {
                 if (counts[j] > 0) {
-                    parts.push("[unit]" + tc.unitKeys[j] + "[/unit]" + counts[j]);
+                    parts.push("[unit]" + tc.unitKeys[j] + "[/unit] " + counts[j]);
                 }
             }
             bb += parts.join(" ") + "\n";
         }
+
+        bb += "[/table]";
 
         $("#tc_village_bb_output").val(bb);
     };
