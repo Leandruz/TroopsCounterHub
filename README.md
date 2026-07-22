@@ -11,30 +11,32 @@ Um script avançado e elegante para **Tribal Wars** de contagem de tropas e expo
 
 ## 🚀 Como Usar no Tribal Wars
 
-### 1. Criar o Bookmarklet
+### 1. Criar o Bookmarklet (Favorito no Navegador)
 
-Crie um novo favorito no seu navegador com o seguinte endereço (URL):
+Crie um novo favorito na barra de favoritos do seu navegador e insira o seguinte código no campo **URL**:
 
+#### **Opção Recomendada (Injeção Dinâmica com Cache-Buster):**
 ```javascript
-javascript:$.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js');
+javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js?v='+Date.now();document.body.appendChild(s);})();
 ```
 
-*(Ou usando o link direto do GitHub):*
-
+#### **Opção Alternativa (via $.getScript):**
 ```javascript
-javascript:$.getScript('https://raw.githubusercontent.com/Leandruz/TroopsCounterHub/main/troopsCounterBB.js');
+javascript:$.getScript('https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js?v='+Date.now());
 ```
+
+---
 
 ### 2. Executar no Jogo
 
 1. Entre no **Tribal Wars**.
-2. Acesse a tela de **Visualização Geral de Tropas** (`Visualizações -> Tropas`).
+2. Acesse a tela de **Visualização Geral de Tropas** (`Visualizações -> Tropas` ou URL com `screen=overview_villages&mode=units`).
 3. Clique no favorito (bookmarklet) salvo no seu navegador.
-4. A interface do **TroopsCounterHub** será exibida instantaneamente!
+4. O painel do **TroopsCounterHub** será exibido instantaneamente!
 
 ---
 
 ## 🛠️ Tecnologias
 - JavaScript (ES6+)
-- jQuery (Tribal Wars Environment)
-- Custom CSS / Responsive Modal Design
+- jQuery (Ambiente Tribal Wars)
+- Custom CSS / Modal com Design Moderno

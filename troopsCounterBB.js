@@ -1,11 +1,12 @@
 /**
  * Tribal Wars Troops Counter & BB Code Exporter
- * Author: Antigravity Code Assistant
- * Version: 2.0.0
+ * Author: Leandro Correa (Leandruz)
+ * Repository: https://github.com/Leandruz/TroopsCounterHub
+ * Version: 2.0.1
  * 
  * Instructions:
  * Create a bookmarklet in your browser with the following URL:
- * javascript:$.getScript('YOUR_HOSTED_URL_TO_THIS_FILE/troopsCounterBB.js');
+ * javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Leandruz/TroopsCounterHub@main/troopsCounterBB.js?v='+Date.now();document.body.appendChild(s);})();
  */
 
 (function () {
@@ -13,19 +14,28 @@
 
     // 1. Environment & Screen Check
     function checkScreen() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const screen = urlParams.get('screen');
-        const mode = urlParams.get('mode');
-        const view = urlParams.get('view');
-        
-        return (screen === 'overview_villages' && mode === 'units' && view === null);
+        let screen = null;
+        let mode = null;
+
+        if (typeof game_data !== 'undefined' && game_data.screen) {
+            screen = game_data.screen;
+            mode = game_data.mode;
+        } else {
+            const urlParams = new URLSearchParams(window.location.search);
+            screen = urlParams.get('screen');
+            mode = urlParams.get('mode');
+        }
+
+        return (screen === 'overview_villages' && mode === 'units');
     }
 
     if (!checkScreen()) {
-        UI.ErrorMessage(
-            'Este script deve ser executado na página de <b>Visualização Geral de Tropas</b>.<br><a href="/game.php?screen=overview_villages&mode=units" class="btn">Ir para Tropas</a>',
-            6000
-        );
+        const msg = 'Este script deve ser executado na página de <b>Visualização Geral de Tropas</b>.<br><a href="/game.php?screen=overview_villages&mode=units" class="btn">Ir para Tropas</a>';
+        if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
+            UI.ErrorMessage(msg, 6000);
+        } else {
+            alert('Este script deve ser executado na página de Visualização Geral de Tropas (overview_villages & mode=units).');
+        }
         return;
     }
 
@@ -439,7 +449,15 @@
     // 8. Main Application Controller
     function startApp() {
         const parsed = parseTroops();
-        if (!parsed) return;
+        if (!parsed || !parsed.villages || parsed.villages.length === 0) {
+            const errorMsg = 'Nenhuma informação de tropas encontrada na tabela (#units_table). Certifique-se de estar na página <b>Visualização Geral -> Tropas</b>.';
+            if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
+                UI.ErrorMessage(errorMsg, 6000);
+            } else {
+                alert('Nenhuma informação de tropas encontrada na tabela (#units_table). Certifique-se de estar na página Visualização Geral -> Tropas.');
+            }
+            return;
+        }
 
         const { villages, unitsOrder } = parsed;
 
