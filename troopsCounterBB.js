@@ -147,50 +147,76 @@
         console.error('Failed to load settings from localStorage', e);
     }
 
-    // 4. Fetch unit populations
+    // 4. Fetch unit populations safely
     let unitPopulations = { ...FALLBACK_POP };
     function fetchUnitPopulations() {
         try {
-            // Check if units XML is loaded or interface.php is accessible
-            $.ajax({
-                async: false,
-                url: '/interface.php',
-                data: { func: 'get_unit_info' },
-                dataType: 'xml',
-                success: function (xml) {
-                    $(xml).find('config > *').each(function () {
-                        const unitName = this.nodeName;
-                        const pop = parseInt($(this).find('pop').text(), 10);
-                        if (!isNaN(pop)) {
-                            unitPopulations[unitName] = pop;
-                        }
-                    });
-                }
-            });
+            if (typeof $ !== 'undefined' && $.ajax) {
+                $.ajax({
+                    url: '/interface.php?func=get_unit_info',
+                    dataType: 'xml',
+                    success: function (xml) {
+                        $(xml).find('config > *').each(function () {
+                            const unitName = this.nodeName;
+                            const pop = parseInt($(this).find('pop').text(), 10);
+                            if (!isNaN(pop)) {
+                                unitPopulations[unitName] = pop;
+                            }
+                        });
+                    }
+                });
+            }
         } catch (e) {
             console.warn('Could not fetch dynamic unit info, using fallbacks.', e);
         }
     }
     fetchUnitPopulations();
 
-    // 5. Parse Troops Table
+    // 5. Parse Troops Table (Robust & Multi-format)
     function parseTroops() {
+        // 1. Locate main units table
+        let $table = $('#units_table');
+        if ($table.length === 0) {
+            $table = $('table.vis').has('img[src*="unit_"]').first();
+        }
+        if ($table.length === 0) {
+            $table = $('table.vis_item').has('img[src*="unit_"]').first();
+        }
+
+        if ($table.length === 0) {
+            const msg = 'Tabela de tropas (#units_table) não foi encontrada nesta página. Certifique-se de estar na aba Tropas.';
+            if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
+                UI.ErrorMessage(msg, 6000);
+            } else {
+                alert(msg);
+            }
+            return null;
+        }
+
+        // 2. Identify unit columns from header images
         const unitsOrder = [];
-        let ths = $('#units_table thead th');
+        let ths = $table.find('thead th');
         if (ths.length === 0) {
-            ths = $('#units_table tbody:eq(0) th');
+            ths = $table.find('tbody:eq(0) th');
+        }
+        if (ths.length === 0) {
+            ths = $table.find('tr:first th, tr:first td');
         }
         
         ths.each(function () {
             const img = $(this).find('img');
             if (img.length) {
-                const src = img.attr('src');
-                const match = src.match(/unit_([a-z_]+)\.png/);
-                if (match) {
-                    // Normalize paladin or noble names if necessary
-                    let unitName = match[1];
-                    if (unitName === 'knight') unitName = 'knight';
-                    if (unitName === 'snob') unitName = 'snob';
+                const src = img.attr('src') || '';
+                const dataUnit = img.data('unit') || img.attr('data-unit');
+                let unitName = dataUnit;
+                if (!unitName && src) {
+                    const match = src.match(/unit_([a-z0-9_]+)/i);
+                    if (match) {
+                        unitName = match[1];
+                    }
+                }
+                if (unitName) {
+                    unitName = unitName.toLowerCase().replace(/[^a-z0-9_]/g, '');
                     unitsOrder.push(unitName);
                 }
             }
@@ -198,64 +224,76 @@
 
         const N = unitsOrder.length;
         if (N === 0) {
-            console.error('No unit columns found!');
+            const msg = 'Nenhuma coluna de unidade reconhecida nos cabeçalhos da tabela.';
+            if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
+                UI.ErrorMessage(msg, 6000);
+            } else {
+                alert(msg);
+            }
             return null;
         }
 
         const villages = [];
 
-        // In Tribal Wars, row order is fixed: Own (0), In Village (1), Support (2), Transit (3).
-        // Sometimes a total summary row is at the end of each tbody, which should be skipped.
-        $('#units_table tbody').each(function () {
+        // 3. Parse Village Rows
+        let tbodies = $table.find('tbody');
+        if (tbodies.length === 0) {
+            tbodies = $table;
+        }
+
+        tbodies.each(function () {
             const tbody = $(this);
-            // Skip header or table-wide sum tbodies
-            if (tbody.find('th').length > 0 || tbody.attr('id') === 'units_table_header') return;
-            
-            const rows = tbody.find('tr');
+            if (tbody.attr('id') === 'units_table_header') return;
+
+            const rows = tbody.find('tr').filter(function() {
+                return $(this).find('th').length === 0;
+            });
+
             if (rows.length === 0) return;
 
-            // Remove totals row inside tbody if it exists
-            const lastRowText = rows.last().text().toLowerCase();
-            const actualRows = [...rows];
-            if (lastRowText.includes('total') || lastRowText.includes('soma')) {
-                actualRows.pop();
-            }
+            const actualRows = [];
+            rows.each(function() {
+                const txt = $(this).text().toLowerCase();
+                if (!txt.includes('total') && !txt.includes('soma')) {
+                    actualRows.push($(this));
+                }
+            });
 
             if (actualRows.length === 0) return;
 
-            const row0 = $(actualRows[0]);
-            const td0 = row0.find('td').eq(0);
-            const villageLink = td0.find('a[href*="screen=overview"]').first();
-            
+            const row0 = actualRows[0];
+            const cells0 = row0.find('td');
+            if (cells0.length === 0) return;
+
+            const villageLink = row0.find('a[href*="screen=overview"]').first();
             let fullName = '';
             let villageId = '';
+
             if (villageLink.length) {
                 fullName = villageLink.text().trim();
-                const href = villageLink.attr('href');
+                const href = villageLink.attr('href') || '';
                 const idMatch = href.match(/village=(\d+)/);
                 if (idMatch) villageId = idMatch[1];
-            } else {
-                fullName = td0.text().trim();
+            }
+            if (!fullName) {
+                fullName = cells0.eq(0).text().trim();
             }
 
             if (!fullName) return;
 
-            // Parse coordinates (XXX|YYY)
             const coordMatch = fullName.match(/(\d+)\|(\d+)/);
             if (!coordMatch) return;
             const coords = coordMatch[0];
 
-            // Extract clean name by stripping out coordinates and continent
             const cleanName = fullName
                 .replace(/\(\d+\|\d+\)/g, '')
                 .replace(/K\d+/g, '')
                 .replace(/\s+/g, ' ')
                 .trim();
 
-            // Initialize village data structures
             const villageData = {
                 id: villageId,
-                name: cleanName,
+                name: cleanName || 'Aldeia',
                 coords: coords,
                 fullName: fullName,
                 own: {},
@@ -271,17 +309,29 @@
                 villageData.transit[u] = 0;
             });
 
-            // Own troops (Row 0): cells are: td0 (Village), td1 (Row label), td2..N+1 (units)
-            const cells0 = row0.find('td');
-            for (let i = 0; i < N; i++) {
-                const count = parseInt(cells0.eq(i + 2).text().trim(), 10) || 0;
-                villageData.own[unitsOrder[i]] = count;
+            let unitStartCol0 = 2;
+            if (cells0.length <= N + 1) {
+                unitStartCol0 = 1;
+            } else {
+                const cell1Text = cells0.eq(1).text().trim().replace(/\./g, '');
+                if (/^\d+$/.test(cell1Text)) {
+                    unitStartCol0 = 1;
+                }
             }
 
-            // Parse other rows: In Village (Row 1), Outer (Row 2), Transit (Row 3)
+            for (let i = 0; i < N; i++) {
+                const colIdx = unitStartCol0 + i;
+                if (colIdx < cells0.length) {
+                    const count = parseInt(cells0.eq(colIdx).text().replace(/\./g, '').trim(), 10) || 0;
+                    villageData.own[unitsOrder[i]] = count;
+                }
+            }
+
             for (let r = 1; r < actualRows.length; r++) {
-                const row = $(actualRows[r]);
+                const row = actualRows[r];
                 const cells = row.find('td');
+                if (cells.length === 0) continue;
+
                 const label = cells.eq(0).text().trim().toLowerCase();
 
                 let rowType = '';
@@ -292,22 +342,39 @@
                 } else if (label.includes('a caminho') || label.includes('transit')) {
                     rowType = 'transit';
                 } else {
-                    // Fallback to row index
                     if (r === 1) rowType = 'in_village';
                     else if (r === 2) rowType = 'outer';
                     else if (r === 3) rowType = 'transit';
                 }
 
+                let unitStartCol = 1;
+                if (cells.length > N + 1 && !/^\d+$/.test(cells.eq(0).text().trim().replace(/\./g, ''))) {
+                    unitStartCol = 1;
+                }
+
                 if (rowType) {
                     for (let i = 0; i < N; i++) {
-                        const count = parseInt(cells.eq(i + 1).text().trim(), 10) || 0;
-                        villageData[rowType][unitsOrder[i]] = count;
+                        const colIdx = unitStartCol + i;
+                        if (colIdx < cells.length) {
+                            const count = parseInt(cells.eq(colIdx).text().replace(/\./g, '').trim(), 10) || 0;
+                            villageData[rowType][unitsOrder[i]] = count;
+                        }
                     }
                 }
             }
 
             villages.push(villageData);
         });
+
+        if (villages.length === 0) {
+            const msg = `Nenhuma aldeia pôde ser lida da tabela de tropas (${N} unidades detectadas: ${unitsOrder.join(', ')}).`;
+            if (typeof UI !== 'undefined' && typeof UI.ErrorMessage === 'function') {
+                UI.ErrorMessage(msg, 6000);
+            } else {
+                alert(msg);
+            }
+            return null;
+        }
 
         return { villages, unitsOrder };
     }
