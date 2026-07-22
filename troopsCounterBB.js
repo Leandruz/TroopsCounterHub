@@ -44,7 +44,8 @@ if (!window.troopCounter) window.troopCounter = {};
             "Exportar BB por Aldeia",        // 22
             "Filtrar Grupo: ",               // 23
             "Carregando grupos...",          // 24
-            "Grupo"                          // 25
+            "Grupo",                         // 25
+            "Copiar Texto (Pastebin)"        // 26
         ];
         tc.unitNamesPT = "Lanceiro,Espadachim,Bárbaro,Arqueiro,Explorador,Cavalaria_Leve,Arqueiro_a_cavalo,Cavalaria_Pesada,Aríete,Catapulta,Paladino,Nobres".split(",");
     } else {
@@ -74,7 +75,8 @@ if (!window.troopCounter) window.troopCounter = {};
             "Export BB per Village",
             "Filter Group: ",
             "Loading groups...",
-            "Group"
+            "Group",
+            "Copy Text (Pastebin)"
         ];
         tc.unitNamesPT = "Spear_fighter,Swordsman,Axeman,Archer,Scout,Light_cavalry,Mounted_archer,Heavy_cavalry,Ram,Catapult,Paladin,Nobleman".split(",");
     }
@@ -144,9 +146,10 @@ if (!window.troopCounter) window.troopCounter = {};
     html += "</table>";
     html += "</div>";
     html += "<div style='text-align:center; margin-top:6px;'>";
-    html += "<a href='#' onclick=\"troopCounter.copyVillageBB(); return false;\" class='btn' id='tc_copy_bb_btn'>" + lang[20] + "</a>";
+    html += "<a href='#' onclick=\"troopCounter.copyVillageBB(); return false;\" class='btn' id='tc_copy_bb_btn' style='margin-right:5px;'>" + lang[20] + "</a>";
+    html += "<a href='#' onclick=\"troopCounter.copyVillageText(); return false;\" class='btn' id='tc_copy_text_btn'>" + lang[26] + "</a>";
     html += "</div>";
-    html += "<textarea id='tc_village_bb_output' rows='6' style='width:100%; margin-top:6px; display:none;' onclick='this.select();'></textarea>";
+    html += "<textarea id='tc_village_export_output' rows='6' style='width:100%; margin-top:6px; display:none;' onclick='this.select();'></textarea>";
     html += "</div>";
 
     Dialog.show("tc_dialog", html);
@@ -533,11 +536,11 @@ if (!window.troopCounter) window.troopCounter = {};
         $("#tc_village_tbody").html(headerHtml + rowsHtml);
 
         // Generate BB code for filtered villages
-        tc.generateVillageBB();
+        tc.generateVillageExport();
     };
 
-    // Generate BB code per village (respecting group filter)
-    tc.generateVillageBB = function () {
+    // Generate BB and Text code per village
+    tc.generateVillageExport = function () {
         if (!tc.villageData || tc.villageData.length === 0) return;
 
         var numUnits = tc.unitKeys.length;
@@ -547,6 +550,9 @@ if (!window.troopCounter) window.troopCounter = {};
 
         var bb = "[table]\n";
         bb += "[**]Aldeia[||]Grupo[||]Tropas[/**]\n";
+
+        var text = "Aldeia | Grupo | Tropas\n";
+        text += "--------------------------------------------------------\n";
 
         for (var v = 0; v < tc.villageData.length; v++) {
             var village = tc.villageData[v];
@@ -573,41 +579,62 @@ if (!window.troopCounter) window.troopCounter = {};
             }
 
             var groupText = groups.length > 0 ? groups.join(", ") : "-";
-            var villageText = village.coords ? "[coord]" + village.coords + "[/coord]" : village.name.substring(0, 30);
+            var bbVillageText = village.coords ? "[coord]" + village.coords + "[/coord]" : village.name.substring(0, 30);
+            var plainVillageText = village.coords ? village.coords : village.name.substring(0, 30);
 
-            bb += "[*]" + villageText + "[|]" + groupText + "[|]";
+            bb += "[*]" + bbVillageText + "[|]" + groupText + "[|]";
+            text += plainVillageText + " | " + groupText + " | ";
 
-            var parts = [];
+            var bbParts = [];
+            var textParts = [];
             for (var j = 0; j < numUnits; j++) {
                 if (counts[j] > 0) {
-                    parts.push("[unit]" + tc.unitKeys[j] + "[/unit] " + counts[j]);
+                    bbParts.push("[unit]" + tc.unitKeys[j] + "[/unit] " + counts[j]);
+                    textParts.push(tc.unitNamesPT[j] + ": " + counts[j]);
                 }
             }
-            bb += parts.join(" ") + "\n";
+            bb += bbParts.join(" ") + "\n";
+            text += textParts.join(" - ") + "\n";
         }
 
         bb += "[/table]";
 
-        $("#tc_village_bb_output").val(bb);
+        tc.lastBBOutput = bb;
+        tc.lastTextOutput = text;
     };
 
     // Copy village BB code
     tc.copyVillageBB = function () {
-        var $ta = $("#tc_village_bb_output");
-        if ($ta.is(":hidden")) {
-            $ta.show();
-        }
+        var $ta = $("#tc_village_export_output");
+        $ta.val(tc.lastBBOutput);
+        if ($ta.is(":hidden")) $ta.show();
         $ta[0].select();
         $ta[0].setSelectionRange(0, 99999);
         try {
             document.execCommand("copy");
+            var originalText = $("#tc_copy_bb_btn").text();
             $("#tc_copy_bb_btn").text(lang[21]);
             setTimeout(function () {
-                $("#tc_copy_bb_btn").text(lang[20]);
+                $("#tc_copy_bb_btn").text(originalText);
             }, 2000);
-        } catch (e) {
-            // textarea is shown for manual copy
-        }
+        } catch (e) { }
+    };
+
+    // Copy village plain text
+    tc.copyVillageText = function () {
+        var $ta = $("#tc_village_export_output");
+        $ta.val(tc.lastTextOutput);
+        if ($ta.is(":hidden")) $ta.show();
+        $ta[0].select();
+        $ta[0].setSelectionRange(0, 99999);
+        try {
+            document.execCommand("copy");
+            var originalText = $("#tc_copy_text_btn").text();
+            $("#tc_copy_text_btn").text(lang[21]);
+            setTimeout(function () {
+                $("#tc_copy_text_btn").text(originalText);
+            }, 2000);
+        } catch (e) { }
     };
 
     // Trigger initial data fetch
